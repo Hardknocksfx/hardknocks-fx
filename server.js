@@ -116,6 +116,8 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+// Serve static frontend files from your project folder
+app.use(express.static(__dirname));
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
