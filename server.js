@@ -1,5 +1,4 @@
 const express = require('express');
-const fetch = require('node-fetch');
 require('dotenv').config();
 
 const app = express();
@@ -24,7 +23,7 @@ app.post('/api/webhook/signal', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid signal payload structure.' });
     }
 
-    // 1. Fetch current bin data from JSONBin
+    // 1. Fetch current bin data from JSONBin using native fetch
     const getRes = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
       headers: { 'X-Master-Key': JSONBIN_API_KEY }
     });
@@ -51,12 +50,12 @@ app.post('/api/webhook/signal', async (req, res) => {
       r_multiple: null,
       confluence: newSignal.confluence || ['Smart Money Structure Break', 'Order Block Engagement'],
       published_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString() // Expires in 12 hours
+      expires_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
     };
 
     signalsList.unshift(formattedSignal);
 
-    // 3. Keep the latest 25 signals max to optimize storage
+    // 3. Keep the latest 25 signals max
     if (signalsList.length > 25) {
       signalsList = signalsList.slice(0, 25);
     }
@@ -73,7 +72,6 @@ app.post('/api/webhook/signal', async (req, res) => {
 
     if (!putRes.ok) throw new Error('Failed to update JSONBin record');
 
-    const updateResult = await putRes.json();
     console.log(`[SIGNAL PUBLISHED] ${formattedSignal.sym} ${formattedSignal.side} at ${formattedSignal.entry}`);
     
     res.status(200).json({ success: true, message: 'Signal successfully published to dashboard!', signal: formattedSignal });
