@@ -10,24 +10,26 @@ const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
 const BIN_ID = process.env.BIN_ID;
 
 // Helper function to make HTTPS requests using native Node.js modules
-if (!getRes.ok) {
-      console.error('JSONBin GET Error Status:', getRes.status);
-      const errBody = getRes.json();
-      console.error('JSONBin Error Body:', errBody);
-      throw new Error(`Failed to fetch current signals from JSONBin: ${JSON.stringify(errBody)}`);
-    }
+const makeRequest = (url, options = {}, postData = null) => {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const reqOptions = {
+      hostname: urlObj.hostname,
+      path: urlObj.pathname + urlObj.search,
+      method: options.method || 'GET',
+      headers: options.headers || {}
     };
 
     const req = https.request(reqOptions, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => {
+        let parsedData = {};
+        try { parsedData = JSON.parse(data); } catch (e) { parsedData = { raw: data }; }
         resolve({
           ok: res.statusCode >= 200 && res.statusCode < 300,
           status: res.statusCode,
-          json: () => {
-            try { return JSON.parse(data); } catch (e) { return {}; }
-          }
+          data: parsedData
         });
       });
     });
@@ -55,14 +57,28 @@ app.post('/api/webhook/signal', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid signal payload structure.' });
     }
 
+    // Pass both master key and access key headers to prevent 401/403 authorization mismatches
+    const jsonBinHeaders = {
+      'X-Master-Key': JSONBIN_API_KEY,
+      'X-Access-Key': JSONBIN_API_KEY,
+      'Content-Type': 'application/json'
+    };
+
     // 1. Fetch current bin data from JSONBin using native HTTPS
     const getRes = await makeRequest(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-      headers: { 'X-Master-Key': JSONBIN_API_KEY }
+      headers: jsonBinHeaders
     });
     
-    if (!getRes.ok) throw new Error('Failed to fetch current signals from JSONBin');
+    if (!getRes.ok) {
+      console.error('JSONBin GET Error Status:', getRes.status, getRes.data);
+      return res.status(502).json({ 
+        success: false, 
+        error: `JSONBin API rejected request (Status ${getRes.status})`, 
+        details: getRes.data 
+      });
+    }
     
-    const binData = getRes.json();
+    const binData = getRes.data;
     let signalsList = binData.record?.signals || binData.record || [];
 
     // 2. Prepend the new live signal
@@ -97,13 +113,19 @@ app.post('/api/webhook/signal', async (req, res) => {
     const putRes = await makeRequest(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
       method: 'PUT',
       headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': JSONBIN_API_KEY,
+        ...jsonBinHeaders,
         'Content-Length': Buffer.byteLength(postString)
       }
     }, postString);
 
-    if (!putRes.ok) throw new Error('Failed to update JSONBin record');
+    if (!putRes.ok) {
+      console.error('JSONBin PUT Error Status:', putRes.status, putRes.data);
+      return res.status(502).json({ 
+        success: false, 
+        error: `JSONBin update failed (Status ${putRes.status})`, 
+        details: putRes.data 
+      });
+    }
 
     console.log(`[SIGNAL PUBLISHED] ${formattedSignal.sym} ${formattedSignal.side} at ${formattedSignal.entry}`);
     
