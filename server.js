@@ -10,14 +10,12 @@ const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
 const BIN_ID = process.env.BIN_ID;
 
 // Helper function to make HTTPS requests using native Node.js modules
-const makeRequest = (url, options = {}, postData = null) => {
-  return new Promise((resolve, reject) => {
-    const urlObj = new URL(url);
-    const reqOptions = {
-      hostname: urlObj.hostname,
-      path: urlObj.pathname + urlObj.search,
-      method: options.method || 'GET',
-      headers: options.headers || {}
+if (!getRes.ok) {
+      console.error('JSONBin GET Error Status:', getRes.status);
+      const errBody = getRes.json();
+      console.error('JSONBin Error Body:', errBody);
+      throw new Error(`Failed to fetch current signals from JSONBin: ${JSON.stringify(errBody)}`);
+    }
     };
 
     const req = https.request(reqOptions, (res) => {
