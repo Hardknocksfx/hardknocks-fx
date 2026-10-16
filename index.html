@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hardknocks Fx | XAU/USD Signal Distribution Engine</title>
+  <style>
+    :root {
+      --bg: #0b0b0f;
+      --card-bg: #13131a;
+      --border: #22222f;
+      --text: #e1e1e6;
+      --text-muted: #7d7d92;
+      --gold: #f3ba2f;
+      --green: #0ecb81;
+      --red: #f6465d;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      padding: 20px;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 15px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      letter-spacing: 0.5px;
+      color: var(--gold);
+    }
+
+    .gold-ticker {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--card-bg);
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 15px;
+      margin-bottom: 35px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .stat-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .stat-val {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .stat-val.pos { color: var(--green); }
+    .stat-val.neg { color: var(--red); }
+
+    .note {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 5px;
+    }
+
+    /* Sections */
+    section {
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 15px;
+      color: var(--text);
+      border-left: 3px solid var(--gold);
+      padding-left: 10px;
+    }
+
+    .feed-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .sig {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 15px 20px;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr 1fr;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 768px) {
+      .sig {
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+    }
+
+    .side {
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: inline-block;
+      text-align: center;
+    }
+
+    .tag-long { background: rgba(14, 203, 129, 0.15); color: var(--green); }
+    .tag-short { background: rgba(246, 70, 93, 0.15); color: var(--red); }
+
+    .rr {
+      font-weight: 600;
+    }
+
+    .score-badge {
+      background: rgba(243, 186, 47, 0.15);
+      color: var(--gold);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      margin-left: 5px;
+    }
+
+    .blackout-flag {
+      background: rgba(246, 70, 93, 0.2);
+      color: var(--red);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      margin-left: 5px;
+    }
+
+    /* Lifecycle CSS badges */
+    .status-pending {
+      color: var(--gold);
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .status-active {
+      color: var(--green);
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .status-closed {
+      font-weight: 700;
+      font-size: 0.8rem;
+    }
+    .status-closed.win { color: var(--green); }
+    .status-closed.loss { color: var(--red); }
+    .status-closed.invalidated { color: var(--text-muted); }
+
+    .dimmed {
+      opacity: 0.72;
+    }
+
+    .lifecycle-label {
+      display: block;
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      margin-top: 3px;
+      text-align: center;
+    }
+
+    .pulse {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 0 rgba(14, 203, 129, 0.7);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(14, 203, 129, 0.7);
+      }
+      70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(14, 203, 129, 0);
+      }
+      100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(14, 203, 129, 0);
+      }
+    }
+
+    footer {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>Hardknocks Fx · XAU/USD Engine</h1>
+      <div class="gold-ticker" id="goldTicker">Gold: Loading...</div>
+    </header>
+
+    <!-- Performance Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-title">Signals Logged</div>
+        <div class="stat-val" id="statTotal">0</div>
+        <div class="note" id="expNote">No completed XAU/USD trades logged yet.</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Win Rate</div>
+        <div class="stat-val" id="statWinRate">—</div>
+        <div class="note">Target: > 55%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Avg R-Multiple</div>
+        <div class="stat-val" id="statAvgR">—</div>
+        <div class="note">Risk to Reward</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Expectancy / Trade</div>
+        <div class="stat-val" id="statExp">—</div>
+        <div class="note">Net expected return</div>
+      </div>
+    </div>
+
+    <!-- Live Feed Section -->
+    <section>
+      <h2>Real-Time XAU/USD Signal Feed</h2>
+      <div id="feed" class="feed-container">
+        <p class="sub" style="text-align:center;color:#7d7d92;padding:20px;">Connecting to secure signal distribution engine...</p>
+      </div>
+    </section>
+
+    <!-- Track Record Section -->
+    <section>
+      <h2>XAU/USD Track Record (Wins & Losses)</h2>
+      <div id="history-feed" class="feed-container">
+        <p class="sub" style="text-align:center;color:#7d7d92;padding:20px;">Loading historical records...</p>
+      </div>
+    </section>
+
+    <footer>
+      <p id="feedStatus">Initializing secure client interface...</p>
+    </footer>
+  </div>
+
+  <script>
+    const CONFIG = {
+      SIGNALS_URL: '/api/signals',
+      LIVE_SIGNALS_URL: '/api/signals/live',
+      TRACK_RECORD_URL: '/api/track-record',
+      MARKET_PRICE_URL: '/api/market-price',
+      GOLD_PRICE_URL: 'https://api.gold-api.com/price/XAU'
+    };
+
+    let allSignals = [];
+    let liveSignals = [];
+    let trackRecordSignals = [];
+    let liveGoldPrice = 4138.50;
+
+    function normalizeStatus(status) {
+      const value = String(status || '').toLowerCase().trim();
+
+      const aliases = {
+        open: 'active',
+        live: 'active',
+        active: 'active',
+        pending: 'pending',
+        'pending limit': 'pending',
+
+        closed: 'closed',
+
+        win: 'win',
+        winner: 'win',
+        tp: 'win',
+
+        loss: 'loss',
+        loser: 'loss',
+        sl: 'loss',
+
+        invalid: 'invalidated',
+        expired: 'invalidated',
+        invalidated: 'invalidated'
+      };
+
+      return aliases[value] || value;
+    }
+
+    function calcStats(signals) {
+      const xauClosed = signals.filter(s => {
+        const status = normalizeStatus(s.status);
+        const r = Number(s.r_multiple);
+
+        return (
+          s.sym &&
+          s.sym.toUpperCase() === 'XAUUSD' &&
+          (status === 'win' || status === 'loss') &&
+          Number.isFinite(r)
+        );
+      });
+
+      const total = xauClosed.length;
+      document.getElementById('statTotal').textContent = total;
+
+      if (total === 0) {
+        ['statWinRate', 'statAvgR', 'statExp'].forEach(id => {
+          document.getElementById(id).textContent = '—';
+          document.getElementById(id).className = 'stat-val';
+        });
+
+        document.getElementById('expNote').textContent =
+          'No completed XAU/USD trades logged yet.';
+        return;
+      }
+
+      const wins = xauClosed.filter(s => normalizeStatus(s.status) === 'win');
+      const losses = xauClosed.filter(s => normalizeStatus(s.status) === 'loss');
+
+      const winRate = wins.length / total;
+
+      const sumR = xauClosed.reduce((a, s) => a + Number(s.r_multiple), 0);
+      const avgR = sumR / total;
+
+      const avgWin = wins.length
+        ? wins.reduce((a, s) => a + Number(s.r_multiple), 0) / wins.length
+        : 0;
+
+      const avgLoss = losses.length
+        ? Math.abs(losses.reduce((a, s) => a + Number(s.r_multiple), 0)) / losses.length
+        : 0;
+
+      const expectancy = (winRate * avgWin) - ((1 - winRate) * avgLoss);
+
+      const updateStat = (id, value, suffix, positive) => {
+        const el = document.getElementById(id);
+        el.textContent = value + suffix;
+        el.className = 'stat-val ' + (positive ? 'pos' : 'neg');
+      };
+
+      updateStat('statWinRate', (winRate * 100).toFixed(0), '%', winRate >= 0.5);
+      updateStat('statAvgR', (avgR >= 0 ? '+' : '') + avgR.toFixed(2), 'R', avgR >= 0);
+      updateStat('statExp', (expectancy >= 0 ? '+' : '') + expectancy.toFixed(2), 'R', expectancy >= 0);
+
+      document.getElementById('expNote').textContent =
+        total < 5
+          ? `Sample size small (${total} completed trades). Keep logging.`
+          : `Performance calculated from ${total} completed XAU/USD trades.`;
+    }
+
+    function renderFeeds() {
+      const feed = document.getElementById('feed');
+      const historyFeed = document.getElementById('history-feed');
+
+      // LIVE FEED (PENDING + ACTIVE)
+      const xauLive = liveSignals.filter(
+        s => s.sym && s.sym.toUpperCase() === 'XAUUSD'
+      );
+
+      feed.innerHTML = '';
+
+      if (xauLive.length === 0) {
+        feed.innerHTML = '<p class="sub" style="text-align:center;color:#7d7d92;padding:15px;">No pending or active live XAU/USD signals right now. Waiting for next market structure shift...</p>';
+      } else {
+        xauLive.forEach(s => {
+          const status = normalizeStatus(s.status);
+          const div = document.createElement('div');
+          div.className = 'sig' + (s.blackout ? ' dimmed' : '');
+
+          const side = String(s.side || 'BUY').toUpperCase();
+          const tagClass = side.includes('BUY') ? 'tag-long' : 'tag-short';
+
+          const flags =
+            `<span class="score-badge">${s.score || 5}/5 Conf</span>` +
+            (s.blackout ? '<span class="blackout-flag">NEWS BLOCK</span>' : '');
+
+          let statusBadge;
+          if (status === 'pending') {
+            statusBadge = `
+              <span class="status-pending">
+                <div class="pulse" style="width:6px;height:6px;background:var(--gold);box-shadow:none;animation:none;"></div>
+                PENDING
+              </span>
+              <span class="lifecycle-label">Waiting for entry trigger</span>
+            `;
+          } else {
+            statusBadge = `
+              <span class="status-active">
+                <div class="pulse" style="width:6px;height:6px;"></div>
+                ACTIVE
+              </span>
+              <span class="lifecycle-label">Entry triggered</span>
+            `;
+          }
+
+          const displaySide = status === 'pending' ? side : side.replace(/\s+LIMIT\b/i, '');
+
+          div.innerHTML = `
+            <div>
+              <span class="side ${tagClass}">${displaySide}</span>
+              XAUUSD
+            </div>
+            <div>Entry: ${Number(s.entry).toLocaleString()}</div>
+            <div>SL: ${Number(s.sl).toLocaleString()}</div>
+            <div>TP: ${Number(s.tp).toLocaleString()}</div>
+            <div class="rr">${Number(s.rr || 2.5).toFixed(2)}:1 ${flags}</div>
+            <div>${statusBadge}</div>
+          `;
+          div.title = (s.confluence || []).join(' • ');
+          feed.appendChild(div);
+        });
+      }
+
+      // TRACK RECORD (WIN + LOSS + INVALIDATED)
+      const xauHistory = trackRecordSignals.filter(
+        s => s.sym && s.sym.toUpperCase() === 'XAUUSD'
+      );
+
+      historyFeed.innerHTML = '';
+
+      if (xauHistory.length === 0) {
+        historyFeed.innerHTML = '<p class="sub" style="text-align:center;color:#7d7d92;padding:15px;">No closed or invalidated XAU/USD signals logged yet.</p>';
+      } else {
+        xauHistory.forEach(s => {
+          const status = normalizeStatus(s.status);
+          if (status !== 'win' && status !== 'loss' && status !== 'invalidated' && status !== 'closed') {
+            return;
+          }
+
+          const div = document.createElement('div');
+          div.className = 'sig' + (status === 'invalidated' ? ' dimmed' : '');
+
+          const side = String(s.side || 'XAUUSD').toUpperCase();
+          const tagClass = side.includes('BUY') ? 'tag-long' : 'tag-short';
+
+          let outcome;
+          if (status === 'invalidated') {
+            outcome = `
+              <span class="status-closed invalidated">INVALIDATED</span>
+              <span class="lifecycle-label">Entry never triggered</span>
+            `;
+          } else if (status === 'win') {
+            outcome = `
+              <span class="status-closed win">WIN</span>
+              <span class="lifecycle-label">TP reached</span>
+            `;
+          } else if (status === 'loss') {
+            outcome = `
+              <span class="status-closed loss">LOSS</span>
+              <span class="lifecycle-label">SL reached</span>
+            `;
+          } else {
+            const result = String(s.result || 'closed').toUpperCase();
+            outcome = `<span class="status-closed">${result}</span>`;
+          }
+
+          const r = Number(s.r_multiple);
+          const resultValue = Number.isFinite(r)
+            ? `${r >= 0 ? '+' : ''}${r.toFixed(2)}R`
+            : `${Number(s.rr || 2.5).toFixed(2)}:1`;
+
+          div.innerHTML = `
+            <div><span class="side ${tagClass}">${side}</span> XAUUSD</div>
+            <div>Entry: ${Number(s.entry).toLocaleString()}</div>
+            <div>SL: ${Number(s.sl).toLocaleString()}</div>
+            <div>TP: ${Number(s.tp).toLocaleString()}</div>
+            <div class="rr">${resultValue}</div>
+            <div>${outcome}</div>
+          `;
+          div.title = (s.confluence || []).join(' • ');
+          historyFeed.appendChild(div);
+        });
+      }
+
+      document.getElementById('feedStatus').textContent =
+        `Updated: ${new Date().toLocaleTimeString()} · Pending orders monitored · Active trades monitored · XAU/USD lifecycle engine active`;
+    }
+
+    function updateGoldUI(price) {
+      const ticker = document.getElementById('goldTicker');
+      liveGoldPrice = price;
+      ticker.textContent = `Gold: $${price.toFixed(2)}`;
+    }
+
+    async function pushMarketPriceToServer(price) {
+      try {
+        await fetch(CONFIG.MARKET_PRICE_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol: 'XAUUSD', price: Number(price) })
+        });
+      } catch (err) {
+        console.warn('Could not push XAUUSD price:', err);
+      }
+    }
+
+    async function fetchGoldPrice() {
+      try {
+        const response = await fetch(CONFIG.GOLD_PRICE_URL, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Gold API HTTP ${response.status}`);
+        const data = await response.json();
+
+        if (data && Number.isFinite(Number(data.price))) {
+          const price = Number(data.price);
+          updateGoldUI(price);
+          await pushMarketPriceToServer(price);
+          loadSignals();
+        }
+      } catch (err) {
+        updateGoldUI(liveGoldPrice);
+        console.warn('Gold price feed unavailable:', err);
+      }
+    }
+
+    async function loadSignals() {
+      try {
+        const [allResponse, liveResponse, historyResponse] = await Promise.all([
+          fetch(CONFIG.SIGNALS_URL, { cache: 'no-store' }),
+          fetch(CONFIG.LIVE_SIGNALS_URL, { cache: 'no-store' }),
+          fetch(CONFIG.TRACK_RECORD_URL, { cache: 'no-store' })
+        ]);
+
+        if (!allResponse.ok || !liveResponse.ok || !historyResponse.ok) {
+          throw new Error('Signal API request failed');
+        }
+
+        const allData = await allResponse.json();
+        const liveData = await liveResponse.json();
+        const historyData = await historyResponse.json();
+
+        allSignals = Array.isArray(allData.signals) ? allData.signals : [];
+        liveSignals = Array.isArray(liveData.signals) ? liveData.signals : [];
+        trackRecordSignals = Array.isArray(historyData.signals) ? historyData.signals : [];
+
+        calcStats(trackRecordSignals);
+        renderFeeds();
+      } catch (err) {
+        console.warn('Failed to load Hardknocks XAUUSD signal APIs:', err);
+        document.getElementById('feedStatus').textContent = 'Signal server temporarily unavailable. Retrying...';
+      }
+    }
+
+    // Initial load and polling loops
+    fetchGoldPrice();
+    setInterval(fetchGoldPrice, 15000);
+
+    loadSignals();
+    setInterval(loadSignals, 10000);
+  </script>
+</body>
+</html>
