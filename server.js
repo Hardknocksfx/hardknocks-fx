@@ -100,9 +100,24 @@ app.post('/api/webhook/signal', async (req, res) => {
 
     if (!Array.isArray(signals)) signals = [];
 
+    // ─── ANTI-DUPLICATE ZONE PROTECTION ──────────────────
+    // Check if an active/pending signal with the exact same side and entry already exists
+    const isDuplicate = signals.some(s => 
+      (s.status === 'open' || s.status === 'pending') &&
+      s.side === sideStr &&
+      Math.abs(s.entry - Number(newSignal.entry)) < 0.5 // Within 50 pips/cents of the same zone
+    );
+
+    if (isDuplicate) {
+      console.log(`Duplicate signal suppressed for XAUUSD ${sideStr} at Entry ${newSignal.entry}`);
+      return res.status(200).json({ success: true, message: 'Duplicate signal suppressed. Active setup already exists in this zone.' });
+    }
+    // ─────────────────────────────────────────────────────
+
     // 5. Prepend new signal to the top of the list (keep latest 25)
     signals.unshift(formattedSignal);
     if (signals.length > 25) signals = signals.slice(0, 25);
+
 
     // 6. Push updated array back to JSONBin
     const updateResult = await callJsonBin('PUT', '', { signals: signals });
