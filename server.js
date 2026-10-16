@@ -110,14 +110,15 @@ app.post('/api/webhook/signal', async (req, res) => {
   }
 });
 
-// Health check endpoint
-app.get('/', (req, res) => {
+// 1. Serve static frontend files from your project folder first so root '/' loads index.html
+app.use(express.static(__dirname));
+
+// 2. Health check endpoint (moved to /api/health to keep root free for index.html)
+app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'Online', engine: 'Hardknocks Fx XAUUSD Signal Distribution Engine' });
 });
 
 const PORT = process.env.PORT || 3000;
-// Serve static frontend files from your project folder
-app.use(express.static(__dirname));
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
