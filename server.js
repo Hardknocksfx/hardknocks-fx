@@ -1,6 +1,6 @@
 const express = require('express');
-const fetch = require('node-fetch');
 require('dotenv').config();
+const https = require('https');
 
 const app = express();
 app.use(express.json());
@@ -8,6 +8,40 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
 const BIN_ID = process.env.BIN_ID;
+
+// Helper function to make HTTPS requests using native Node.js modules
+const makeRequest = (url, options = {}, postData = null) => {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const reqOptions = {
+      hostname: urlObj.hostname,
+      path: urlObj.pathname + urlObj.search,
+      method: options.method || 'GET',
+      headers: options.headers || {}
+    };
+
+    const req = https.request(reqOptions, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        resolve({
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          status: res.statusCode,
+          json: () => {
+            try { return JSON.parse(data); } catch (e) { return {}; }
+          }
+        });
+      });
+    });
+
+    req.on('error', (err) => { reject(err); });
+
+    if (postData) {
+      req.write(postData);
+    }
+    req.end();
+  });
+};
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -24,13 +58,13 @@ app.post('/api/webhook/signal', async (req, res) => {
     }
 
     // 1. Fetch current bin data from JSONBin
-    const getRes = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+    const getRes = await makeRequest(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
       headers: { 'X-Master-Key': JSONBIN_API_KEY }
     });
     
     if (!getRes.ok) throw new Error('Failed to fetch current signals from JSONBin');
     
-    const binData = await getRes.json();
+    const binData = getRes.json();
     let signalsList = binData.record?.signals || binData.record || [];
 
     // 2. Prepend the new live signal
@@ -61,14 +95,15 @@ app.post('/api/webhook/signal', async (req, res) => {
     }
 
     // 4. Push updated list back to JSONBin
-    const putRes = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+    const postString = JSON.stringify({ signals: signalsList });
+    const putRes = await makeRequest(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'X-Master-Key': JSONBIN_API_KEY
-      },
-      body: JSON.stringify({ signals: signalsList })
-    });
+        'X-Master-Key': JSONBIN_API_KEY,
+        'Content-Length': Buffer.byteLength(postString)
+      }
+    }, postString);
 
     if (!putRes.ok) throw new Error('Failed to update JSONBin record');
 
