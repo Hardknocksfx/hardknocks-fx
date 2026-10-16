@@ -1,5 +1,5 @@
 const express = require('express');
-const fetch = require('node-fetch');
+const fetch = require('node-fetch').default; // <-- Added .default here
 require('dotenv').config();
 
 const app = express();
