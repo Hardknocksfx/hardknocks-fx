@@ -62,10 +62,16 @@ app.post('/api/webhook/signal', async (req, res) => {
       return res.status(400).json({ error: 'System restricted exclusively to XAUUSD (Gold).' });
     }
 
-    // 2. Automatically detect if it's a Limit Order -> set to 'pending', otherwise 'open'
+    // 2. Robust Status Evaluation (Prioritize explicit status, otherwise auto-detect limit orders)
     const sideStr = (newSignal.side || 'BUY').toUpperCase();
     const isLimitOrder = sideStr.includes('LIMIT');
-    const initialStatus = newSignal.status || (isLimitOrder ? 'pending' : 'open');
+    
+    let initialStatus = 'open';
+    if (newSignal.status) {
+      initialStatus = newSignal.status.toLowerCase();
+    } else if (isLimitOrder) {
+      initialStatus = 'pending';
+    }
 
     // 3. Construct formatted XAUUSD signal object
     const formattedSignal = {
@@ -101,7 +107,7 @@ app.post('/api/webhook/signal', async (req, res) => {
     // 6. Push updated array back to JSONBin
     const updateResult = await callJsonBin('PUT', '', { signals: signals });
 
-    console.log(`Successfully published XAUUSD signal (${sideStr}): Entry ${formattedSignal.entry}`);
+    console.log(`Successfully published XAUUSD signal (${sideStr}) with status [${initialStatus}]: Entry ${formattedSignal.entry}`);
     res.status(200).json({ success: true, message: 'XAUUSD signal published successfully', signal: formattedSignal });
 
   } catch (err) {
@@ -110,10 +116,10 @@ app.post('/api/webhook/signal', async (req, res) => {
   }
 });
 
-// 1. Serve static frontend files from your project folder first so root '/' loads index.html
+// Serve static frontend files from your project folder first so root '/' loads index.html
 app.use(express.static(__dirname));
 
-// 2. Health check endpoint (moved to /api/health to keep root free for index.html)
+// Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'Online', engine: 'Hardknocks Fx XAUUSD Signal Distribution Engine' });
 });
