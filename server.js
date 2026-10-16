@@ -57,7 +57,7 @@ app.post('/api/webhook/signal', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid signal payload structure.' });
     }
 
-    // 1. Fetch current bin data from JSONBin
+    // 1. Fetch current bin data from JSONBin using native HTTPS
     const getRes = await makeRequest(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
       headers: { 'X-Master-Key': JSONBIN_API_KEY }
     });
@@ -94,7 +94,7 @@ app.post('/api/webhook/signal', async (req, res) => {
       signalsList = signalsList.slice(0, 25);
     }
 
-    // 4. Push updated list back to JSONBin
+    // 4. Push updated list back to JSONBin using native HTTPS
     const postString = JSON.stringify({ signals: signalsList });
     const putRes = await makeRequest(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
       method: 'PUT',
