@@ -62,14 +62,14 @@ app.post('/api/webhook/signal', async (req, res) => {
       return res.status(400).json({ error: 'System restricted exclusively to XAUUSD (Gold).' });
     }
 
-    // 2. Robust Status Evaluation (Prioritize explicit status, otherwise auto-detect limit orders)
+    // 2. Force Status Check
     const sideStr = (newSignal.side || 'BUY').toUpperCase();
-    const isLimitOrder = sideStr.includes('LIMIT');
     
+    // Explicitly check incoming status from webhook payload first
     let initialStatus = 'open';
     if (newSignal.status) {
-      initialStatus = newSignal.status.toLowerCase();
-    } else if (isLimitOrder) {
+      initialStatus = String(newSignal.status).toLowerCase();
+    } else if (sideStr.includes('LIMIT')) {
       initialStatus = 'pending';
     }
 
