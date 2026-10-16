@@ -65,7 +65,6 @@ app.post('/api/webhook/signal', async (req, res) => {
     // 2. Force Status Check
     const sideStr = (newSignal.side || 'BUY').toUpperCase();
     
-    // Explicitly check incoming status from webhook payload first
     let initialStatus = 'open';
     if (newSignal.status) {
       initialStatus = String(newSignal.status).toLowerCase();
@@ -101,7 +100,6 @@ app.post('/api/webhook/signal', async (req, res) => {
     if (!Array.isArray(signals)) signals = [];
 
     // ─── ANTI-DUPLICATE ZONE PROTECTION ──────────────────
-    // Check if an active/pending signal with the exact same side and entry already exists
     const isDuplicate = signals.some(s => 
       (s.status === 'open' || s.status === 'pending') &&
       s.side === sideStr &&
@@ -117,7 +115,6 @@ app.post('/api/webhook/signal', async (req, res) => {
     // 5. Prepend new signal to the top of the list (keep latest 25)
     signals.unshift(formattedSignal);
     if (signals.length > 25) signals = signals.slice(0, 25);
-
 
     // 6. Push updated array back to JSONBin
     const updateResult = await callJsonBin('PUT', '', { signals: signals });
