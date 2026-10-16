@@ -1,4 +1,5 @@
 const express = require('express');
+const fetch = require('node-fetch');
 require('dotenv').config();
 
 const app = express();
@@ -6,24 +7,23 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
-const BIN_ID = process.env.BIN_ID; // Your JSONBin Bin ID
+const BIN_ID = process.env.BIN_ID;
 
 // Health check endpoint
 app.get('/', (req, res) => {
   res.send('Hardknocks Fx Automated Signal Server is running live! 🚀');
 });
 
-// Webhook endpoint to receive signals from TradingView or Cron jobs
+// Webhook endpoint to receive signals from TradingView
 app.post('/api/webhook/signal', async (req, res) => {
   try {
     const newSignal = req.body;
 
-    // Validate incoming signal payload
     if (!newSignal.sym || !newSignal.side || !newSignal.entry) {
       return res.status(400).json({ success: false, error: 'Invalid signal payload structure.' });
     }
 
-    // 1. Fetch current bin data from JSONBin using native fetch
+    // 1. Fetch current bin data from JSONBin
     const getRes = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
       headers: { 'X-Master-Key': JSONBIN_API_KEY }
     });
@@ -55,7 +55,7 @@ app.post('/api/webhook/signal', async (req, res) => {
 
     signalsList.unshift(formattedSignal);
 
-    // 3. Keep the latest 25 signals max
+    // 3. Keep latest 25 signals max
     if (signalsList.length > 25) {
       signalsList = signalsList.slice(0, 25);
     }
