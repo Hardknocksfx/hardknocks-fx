@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3000;
 const JSONBIN_API_KEY = process.env.JSONBIN_API_KEY;
 const BIN_ID = process.env.BIN_ID;
 
-// Helper function to make HTTPS requests using native Node.js modules
+// Helper function for ultra-fast native HTTPS requests
 const makeRequest = (url, options = {}, postData = null) => {
   return new Promise((resolve, reject) => {
     const urlObj = new URL(url);
@@ -45,46 +45,44 @@ const makeRequest = (url, options = {}, postData = null) => {
 
 // Health check endpoint
 app.get('/', (req, res) => {
-  res.send('Hardknocks Fx Automated Signal Server is running live! 🚀');
+  res.send('Hardknocks Fx XAUUSD Signal Engine is live & optimized! ⚡');
 });
 
-// Webhook endpoint to receive signals from TradingView
+// Webhook endpoint exclusively for XAUUSD real-time alerts
 app.post('/api/webhook/signal', async (req, res) => {
   try {
     const newSignal = req.body;
 
-    if (!newSignal.sym || !newSignal.side || !newSignal.entry) {
-      return res.status(400).json({ success: false, error: 'Invalid signal payload structure.' });
+    // Strict validation: enforce XAUUSD only
+    const symbol = (newSignal.sym || '').toUpperCase();
+    if (symbol !== 'XAUUSD' || !newSignal.side || !newSignal.entry) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Rejected: Engine is locked exclusively to XAUUSD signals with valid side and entry.' 
+      });
     }
 
-    // Pass both master key and access key headers to prevent 401/403 authorization mismatches
     const jsonBinHeaders = {
       'X-Master-Key': JSONBIN_API_KEY,
       'X-Access-Key': JSONBIN_API_KEY,
       'Content-Type': 'application/json'
     };
 
-    // 1. Fetch current bin data from JSONBin using native HTTPS
+    // 1. Fetch current bin data
     const getRes = await makeRequest(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
       headers: jsonBinHeaders
     });
     
     if (!getRes.ok) {
-      console.error('JSONBin GET Error Status:', getRes.status, getRes.data);
-      return res.status(502).json({ 
-        success: false, 
-        error: `JSONBin API rejected request (Status ${getRes.status})`, 
-        details: getRes.data 
-      });
+      throw new Error(`Failed to fetch current signals from JSONBin (Status ${getRes.status})`);
     }
     
-    const binData = getRes.data;
-    let signalsList = binData.record?.signals || binData.record || [];
+    let signalsList = getRes.data.record?.signals || getRes.data.record || [];
 
-    // 2. Prepend the new live signal
+    // 2. Format the real-time XAUUSD signal
     const formattedSignal = {
       id: 'sig-' + Date.now(),
-      sym: newSignal.sym,
+      sym: 'XAUUSD',
       side: newSignal.side.toUpperCase(),
       entry: Number(newSignal.entry),
       sl: Number(newSignal.sl),
@@ -96,19 +94,20 @@ app.post('/api/webhook/signal', async (req, res) => {
       status: 'open',
       result: null,
       r_multiple: null,
-      confluence: newSignal.confluence || ['Smart Money Structure Break', 'Order Block Engagement'],
+      confluence: newSignal.confluence || ['Institutional Liquidity Sweep', 'XAUUSD Order Block'],
       published_at: new Date().toISOString(),
       expires_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString()
     };
 
+    // Prepend new signal for instant top-of-feed display
     signalsList.unshift(formattedSignal);
 
-    // 3. Keep latest 25 signals max
+    // Keep latest 25 signals max for peak performance
     if (signalsList.length > 25) {
       signalsList = signalsList.slice(0, 25);
     }
 
-    // 4. Push updated list back to JSONBin using native HTTPS
+    // 3. Push updated list back to JSONBin
     const postString = JSON.stringify({ signals: signalsList });
     const putRes = await makeRequest(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
       method: 'PUT',
@@ -119,23 +118,18 @@ app.post('/api/webhook/signal', async (req, res) => {
     }, postString);
 
     if (!putRes.ok) {
-      console.error('JSONBin PUT Error Status:', putRes.status, putRes.data);
-      return res.status(502).json({ 
-        success: false, 
-        error: `JSONBin update failed (Status ${putRes.status})`, 
-        details: putRes.data 
-      });
+      throw new Error(`Failed to update JSONBin record (Status ${putRes.status})`);
     }
 
-    console.log(`[SIGNAL PUBLISHED] ${formattedSignal.sym} ${formattedSignal.side} at ${formattedSignal.entry}`);
+    console.log(`[XAUUSD EXECUTED] ${formattedSignal.side} at ${formattedSignal.entry}`);
     
-    res.status(200).json({ success: true, message: 'Signal successfully published to dashboard!', signal: formattedSignal });
+    res.status(200).json({ success: true, message: 'XAUUSD signal published instantly!', signal: formattedSignal });
   } catch (error) {
-    console.error('Server error publishing signal:', error);
+    console.error('Server error publishing XAUUSD signal:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Hardknocks Fx server listening on port ${PORT}`);
+  console.log(`Hardknocks Fx XAUUSD Engine listening on port ${PORT}`);
 });
