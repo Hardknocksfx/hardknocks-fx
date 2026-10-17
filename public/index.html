@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hardknocks Fx | XAU/USD Signal Distribution Engine</title>
+  <style>
+    :root {
+      --bg: #0b0b0f;
+      --card-bg: #13131a;
+      --border: #22222f;
+      --text: #e1e1e6;
+      --text-muted: #7d7d92;
+      --gold: #f3ba2f;
+      --green: #0ecb81;
+      --red: #f6465d;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      padding: 20px;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 15px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      letter-spacing: 0.5px;
+      color: var(--gold);
+    }
+
+    .gold-ticker {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--card-bg);
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 15px;
+      margin-bottom: 35px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .stat-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .stat-val {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .stat-val.pos { color: var(--green); }
+    .stat-val.neg { color: var(--red); }
+
+    .note {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 5px;
+    }
+
+    /* Sections */
+    section {
+      margin-bottom: 40px;
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 15px;
+      color: var(--text);
+      border-left: 3px solid var(--gold);
+      padding-left: 10px;
+    }
+
+    .feed-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .sig {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 15px 20px;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr 1fr;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 768px) {
+      .sig {
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+    }
+
+    .side {
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 4px;
+      display: inline-block;
+      text-align: center;
+    }
+
+    .tag-long { background: rgba(14, 203, 129, 0.15); color: var(--green); }
+    .tag-short { background: rgba(246, 70, 93, 0.15); color: var(--red); }
+
+    .rr {
+      font-weight: 600;
+    }
+
+    .score-badge {
+      background: rgba(243, 186, 47, 0.15);
+      color: var(--gold);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      margin-left: 5px;
+    }
+
+    .blackout-flag {
+      background: rgba(246, 70, 93, 0.2);
+      color: var(--red);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      margin-left: 5px;
+    }
+
+    /* Lifecycle CSS badges */
+    .status-pending {
+      color: var(--gold);
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .status-active {
+      color: var(--green);
+      font-size: 0.75rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .status-closed {
+      font-weight: 700;
+      font-size: 0.8rem;
+    }
+    .status-closed.win { color: var(--green); }
+    .status-closed.loss { color: var(--red); }
+    .status-closed.invalidated { color: var(--text-muted); }
+
+    .dimmed {
+      opacity: 0.72;
+    }
+
+    .lifecycle-label {
+      display: block;
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      margin-top: 3px;
+      text-align: center;
+    }
+
+    .pulse {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 0 rgba(14, 203, 129, 0.7);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(14, 203, 129, 0.7);
+      }
+      70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 6px rgba(14, 203, 129, 0);
+      }
+      100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(14, 203, 129, 0);
+      }
+    }
+
+    footer {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+      margin-top: 40px;
+    }
+
+    .cell-label { display: none; }
+    @media (max-width: 768px) {
+      body { padding: 12px; }
+      header { align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+      h1 { font-size: 1.15rem; }
+      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .stat-card { padding: 14px 10px; }
+      .sig { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .cell-label { display: inline; color: var(--text-muted); font-size: .75rem; }
+    }
+    @media (max-width: 420px) {
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .sig { padding: 12px; gap: 10px; font-size: .82rem; }
+      .gold-ticker { font-size: .85rem; padding: 6px 9px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>Hardknocks Fx · XAU/USD Engine</h1>
+      <div class="gold-ticker" id="goldTicker">Gold: Loading...</div>
+    </header>
+
+    <!-- Performance Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-title">Completed Trades</div>
+        <div class="stat-val" id="statTotal">0</div>
+        <div class="note" id="expNote">No completed XAU/USD trades logged yet.</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Win Rate</div>
+        <div class="stat-val" id="statWinRate">—</div>
+        <div class="note">Target: > 55%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Avg R-Multiple</div>
+        <div class="stat-val" id="statAvgR">—</div>
+        <div class="note">Risk to Reward</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-title">Expectancy / Trade</div>
+        <div class="stat-val" id="statExp">—</div>
+        <div class="note">Net expected return</div>
+      </div>
+    </div>
+
+    <!-- Live Feed Section -->
+    <section>
+      <h2>Real-Time XAU/USD Signal Feed</h2>
+      <div id="feed" class="feed-container">
+        <p class="sub" style="text-align:center;color:#7d7d92;padding:20px;">Connecting to secure signal distribution engine...</p>
+      </div>
+    </section>
+
+    <!-- Track Record Section -->
+    <section>
+      <h2>XAU/USD Track Record (Wins & Losses)</h2>
+      <div id="history-feed" class="feed-container">
+        <p class="sub" style="text-align:center;color:#7d7d92;padding:20px;">Loading historical records...</p>
+      </div>
+    </section>
+
+    <footer>
+      <p id="feedStatus">Initializing secure client interface...</p>
+    </footer>
+  </div>
+
+  <script>
+'use strict';
+
+const CONFIG = {
+  SIGNALS_URL: '/api/signals',
+  LIVE_SIGNALS_URL: '/api/signals/live',
+  TRACK_RECORD_URL: '/api/track-record',
+  MARKET_PRICE_URL: '/api/market-price',
+  GOLD_PRICE_URL: 'https://api.gold-api.com/price/XAU',
+  SIGNAL_POLL_MS: 10000,
+  PRICE_POLL_MS: 15000,
+  REQUEST_TIMEOUT_MS: 8000
+};
+
+let allSignals = [];
+let liveSignals = [];
+let trackRecordSignals = [];
+let liveGoldPrice = null;
+let lastPriceUpdate = null;
+let signalsRequestRunning = false;
+let priceRequestRunning = false;
+
+const $ = id => document.getElementById(id);
+
+function normalizeStatus(status) {
+  const value = String(status ?? '').toLowerCase().trim();
+  const aliases = {
+    open: 'active', live: 'active', active: 'active',
+    pending: 'pending', 'pending limit': 'pending',
+    closed: 'closed',
+    win: 'win', winner: 'win', tp: 'win', take_profit: 'win',
+    loss: 'loss', loser: 'loss', sl: 'loss', stop_loss: 'loss',
+    invalid: 'invalidated', expired: 'invalidated', invalidated: 'invalidated',
+    cancelled: 'invalidated', canceled: 'invalidated'
+  };
+  return aliases[value] || value;
+}
+
+function normalizeSymbol(signal) {
+  return String(signal?.sym ?? signal?.symbol ?? '')
+    .toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function isXau(signal) {
+  return ['XAUUSD', 'GOLD', 'XAUUS'].includes(normalizeSymbol(signal));
+}
+
+function toFiniteNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatPrice(value) {
+  const number = toFiniteNumber(value);
+  return number === null
+    ? '—'
+    : number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+}
+
+function safeText(value, fallback = '—') {
+  if (value === null || value === undefined || value === '') return fallback;
+  return String(value);
+}
+
+function setStatus(message, isError = false) {
+  const el = $('feedStatus');
+  el.textContent = message;
+  el.style.color = isError ? 'var(--red)' : 'var(--text-muted)';
+}
+
+async function fetchJson(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      cache: 'no-store',
+      ...options,
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function extractSignals(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.signals)) return payload.signals;
+  if (payload && Array.isArray(payload.data)) return payload.data;
+  return [];
+}
+
+function calcStats(signals) {
+  // Count only closed XAU/USD wins/losses with a valid realized R multiple.
+  const closed = signals.filter(signal => {
+    const status = normalizeStatus(signal.status);
+    const r = toFiniteNumber(signal.r_multiple ?? signal.rMultiple);
+    return isXau(signal) && (status === 'win' || status === 'loss') && r !== null;
+  });
+
+  const total = closed.length;
+  $('statTotal').textContent = String(total);
+
+  if (!total) {
+    ['statWinRate', 'statAvgR', 'statExp'].forEach(id => {
+      $(id).textContent = '—';
+      $(id).className = 'stat-val';
+    });
+    $('expNote').textContent = 'No completed XAU/USD trades with valid R results logged yet.';
+    return;
+  }
+
+  const wins = closed.filter(s => normalizeStatus(s.status) === 'win');
+  const losses = closed.filter(s => normalizeStatus(s.status) === 'loss');
+  const winRate = wins.length / total;
+  const realizedR = closed.map(s => toFiniteNumber(s.r_multiple ?? s.rMultiple));
+  const avgR = realizedR.reduce((sum, r) => sum + r, 0) / total;
+
+  const avgWin = wins.length
+    ? wins.reduce((sum, s) => sum + Math.max(0, toFiniteNumber(s.r_multiple ?? s.rMultiple) ?? 0), 0) / wins.length
+    : 0;
+  const avgLoss = losses.length
+    ? losses.reduce((sum, s) => sum + Math.abs(Math.min(0, toFiniteNumber(s.r_multiple ?? s.rMultiple) ?? 0)), 0) / losses.length
+    : 0;
+  const expectancy = (winRate * avgWin) - ((1 - winRate) * avgLoss);
+
+  function updateStat(id, value, suffix, positive) {
+    const el = $(id);
+    el.textContent = `${value}${suffix}`;
+    el.className = `stat-val ${positive ? 'pos' : 'neg'}`;
+  }
+
+  updateStat('statWinRate', (winRate * 100).toFixed(1), '%', winRate >= 0.5);
+  updateStat('statAvgR', `${avgR >= 0 ? '+' : ''}${avgR.toFixed(2)}`, 'R', avgR >= 0);
+  updateStat('statExp', `${expectancy >= 0 ? '+' : ''}${expectancy.toFixed(2)}`, 'R', expectancy >= 0);
+  $('expNote').textContent = total < 30
+    ? `Small sample (${total} completed trades); results may not be reliable yet.`
+    : `Based on ${total} completed XAU/USD trades. Past results do not guarantee future performance.`;
+}
+
+function makeCell(label, value, className = '') {
+  const cell = document.createElement('div');
+  if (className) cell.className = className;
+  const labelEl = document.createElement('span');
+  labelEl.className = 'cell-label';
+  labelEl.textContent = `${label}: `;
+  const valueEl = document.createElement('span');
+  valueEl.textContent = value;
+  cell.append(labelEl, valueEl);
+  return cell;
+}
+
+function makeBadge(text, className) {
+  const span = document.createElement('span');
+  span.className = className;
+  span.textContent = text;
+  return span;
+}
+
+function makeSignalCard(signal, history = false) {
+  const status = normalizeStatus(signal.status);
+  const side = String(signal.side ?? signal.direction ?? '—').toUpperCase();
+  const isBuy = /BUY|LONG/.test(side);
+  const card = document.createElement('div');
+  card.className = 'sig' + ((signal.blackout || status === 'invalidated') ? ' dimmed' : '');
+
+  const direction = document.createElement('div');
+  direction.appendChild(makeBadge(side, `side ${isBuy ? 'tag-long' : 'tag-short'}`));
+  const symbol = document.createElement('span');
+  symbol.textContent = ` ${isXau(signal) ? 'XAU/USD' : safeText(signal.sym ?? signal.symbol)}`;
+  direction.appendChild(symbol);
+  card.appendChild(direction);
+
+  card.append(
+    makeCell('Entry', formatPrice(signal.entry)),
+    makeCell('SL', formatPrice(signal.sl ?? signal.stop_loss)),
+    makeCell('TP', formatPrice(signal.tp ?? signal.take_profit))
+  );
+
+  const rr = toFiniteNumber(signal.rr ?? signal.risk_reward);
+  const r = toFiniteNumber(signal.r_multiple ?? signal.rMultiple);
+  card.appendChild(makeCell(
+    history ? 'Result' : 'R:R',
+    history && r !== null ? `${r >= 0 ? '+' : ''}${r.toFixed(2)}R` : (rr !== null ? `${rr.toFixed(2)}:1` : '—'),
+    'rr'
+  ));
+
+  const statusWrap = document.createElement('div');
+  if (!history && (status === 'pending' || status === 'active')) {
+    statusWrap.appendChild(makeBadge(status === 'pending' ? 'PENDING' : 'ACTIVE',
+      status === 'pending' ? 'status-pending' : 'status-active'));
+    const label = document.createElement('span');
+    label.className = 'lifecycle-label';
+    label.textContent = status === 'pending' ? 'Waiting for entry trigger' : 'Entry triggered';
+    statusWrap.appendChild(label);
+  } else {
+    const result = status === 'win' ? 'WIN' :
+      status === 'loss' ? 'LOSS' :
+      status === 'invalidated' ? 'INVALIDATED' :
+      status === 'closed' ? String(signal.result ?? 'CLOSED').toUpperCase() :
+      status.toUpperCase();
+    const outcomeClass = status === 'win' ? 'win' :
+      status === 'loss' ? 'loss' : 'invalidated';
+    statusWrap.appendChild(makeBadge(result, `status-closed ${outcomeClass}`));
+  }
+  card.appendChild(statusWrap);
+
+  if (!history) {
+    const score = toFiniteNumber(signal.score);
+    if (score !== null) card.appendChild(makeBadge(`${score}/5 Conf`, 'score-badge'));
+    if (signal.blackout) card.appendChild(makeBadge('NEWS BLOCK', 'blackout-flag'));
+  }
+
+  const confluence = Array.isArray(signal.confluence) ? signal.confluence : [];
+  card.title = confluence.map(String).join(' • ');
+  return card;
+}
+
+function renderFeeds() {
+  const feed = $('feed');
+  const historyFeed = $('history-feed');
+  feed.replaceChildren();
+  historyFeed.replaceChildren();
+
+  const current = liveSignals.filter(s =>
+    isXau(s) && ['pending', 'active'].includes(normalizeStatus(s.status))
+  );
+
+  if (!current.length) {
+    const empty = document.createElement('p');
+    empty.className = 'sub';
+    empty.style.cssText = 'text-align:center;color:#7d7d92;padding:15px;';
+    empty.textContent = 'No pending or active XAU/USD signals are available. Waiting for the next valid signal.';
+    feed.appendChild(empty);
+  } else {
+    current.forEach(s => feed.appendChild(makeSignalCard(s)));
+  }
+
+  const history = trackRecordSignals.filter(s => {
+    const status = normalizeStatus(s.status);
+    return isXau(s) && ['win', 'loss', 'invalidated', 'closed'].includes(status);
+  });
+
+  if (!history.length) {
+    const empty = document.createElement('p');
+    empty.className = 'sub';
+    empty.style.cssText = 'text-align:center;color:#7d7d92;padding:15px;';
+    empty.textContent = 'No closed or invalidated XAU/USD signals are recorded yet.';
+    historyFeed.appendChild(empty);
+  } else {
+    history.slice().reverse().forEach(s => historyFeed.appendChild(makeSignalCard(s, true)));
+  }
+}
+
+function updateGoldUI(price) {
+  if (!Number.isFinite(price) || price <= 0) return;
+  liveGoldPrice = price;
+  lastPriceUpdate = new Date();
+  $('goldTicker').textContent = `Gold: $${price.toFixed(2)}`;
+  $('goldTicker').title = `Last updated: ${lastPriceUpdate.toLocaleTimeString()}`;
+}
+
+async function pushMarketPriceToServer(price) {
+  try {
+    await fetchJson(CONFIG.MARKET_PRICE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol: 'XAUUSD', price, source: 'gold-api' })
+    });
+  } catch (error) {
+    // This endpoint is optional for displaying the public price, but required
+    // if the backend uses this dashboard to distribute its market price.
+    console.warn('Market price was displayed but could not be posted to backend:', error);
+  }
+}
+
+async function fetchGoldPrice() {
+  if (priceRequestRunning) return;
+  priceRequestRunning = true;
+  try {
+    const data = await fetchJson(CONFIG.GOLD_PRICE_URL);
+    const price = toFiniteNumber(data?.price);
+    if (price === null || price <= 0) throw new Error('Gold API returned an invalid price');
+
+    updateGoldUI(price);
+    await pushMarketPriceToServer(price);
+  } catch (error) {
+    console.warn('Gold price feed unavailable:', error);
+    const ageSeconds = lastPriceUpdate ? Math.round((Date.now() - lastPriceUpdate.getTime()) / 1000) : null;
+    $('goldTicker').textContent = liveGoldPrice === null
+      ? 'Gold: Price unavailable'
+      : `Gold: $${liveGoldPrice.toFixed(2)} · STALE`;
+    $('goldTicker').title = ageSeconds === null
+      ? 'No successful price update yet'
+      : `Last successful update was ${ageSeconds} seconds ago`;
+  } finally {
+    priceRequestRunning = false;
+  }
+}
+
+async function loadSignals() {
+  if (signalsRequestRunning) return;
+  signalsRequestRunning = true;
+  try {
+    // Fetch independently so one endpoint failure does not erase good data
+    // returned by the other endpoints.
+    const results = await Promise.allSettled([
+      fetchJson(CONFIG.SIGNALS_URL),
+      fetchJson(CONFIG.LIVE_SIGNALS_URL),
+      fetchJson(CONFIG.TRACK_RECORD_URL)
+    ]);
+
+    let errors = 0;
+    if (results[0].status === 'fulfilled') {
+      allSignals = extractSignals(results[0].value);
+    } else { errors++; console.warn('Signals endpoint failed:', results[0].reason); }
+
+    if (results[1].status === 'fulfilled') {
+      liveSignals = extractSignals(results[1].value);
+    } else { errors++; console.warn('Live signals endpoint failed:', results[1].reason); }
+
+    if (results[2].status === 'fulfilled') {
+      trackRecordSignals = extractSignals(results[2].value);
+    } else { errors++; console.warn('Track record endpoint failed:', results[2].reason); }
+
+    // If history endpoint is down, use the all-signals endpoint as a fallback.
+    if (results[2].status === 'rejected' && allSignals.length) {
+      trackRecordSignals = allSignals;
+    }
+
+    calcStats(trackRecordSignals);
+    renderFeeds();
+
+    if (errors === 0) {
+      setStatus(`Updated ${new Date().toLocaleTimeString()} · ${liveSignals.length} live records · ${trackRecordSignals.length} history records`);
+    } else {
+      setStatus(`Partial data · ${errors} API endpoint(s) failed · Last checked ${new Date().toLocaleTimeString()}`, true);
+    }
+  } catch (error) {
+    console.error('Unexpected signal dashboard error:', error);
+    setStatus('Dashboard update failed. Check the browser console and backend API.', true);
+  } finally {
+    signalsRequestRunning = false;
+  }
+}
+
+async function initializeDashboard() {
+  $('goldTicker').textContent = 'Gold: Loading…';
+  setStatus('Connecting to signal API…');
+  await Promise.allSettled([fetchGoldPrice(), loadSignals()]);
+  window.setInterval(fetchGoldPrice, CONFIG.PRICE_POLL_MS);
+  window.setInterval(loadSignals, CONFIG.SIGNAL_POLL_MS);
+}
+
+initializeDashboard();
+</script>
+</body>
+</html>

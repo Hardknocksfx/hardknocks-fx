@@ -1165,22 +1165,13 @@ async function expirePendingSignals() {
   }
 }
 
-// Run expiration engine every minute.
-setInterval(
-  expirePendingSignals,
-  LIFECYCLE_INTERVAL_MS
-);
-
-// Run once when server starts.
-expirePendingSignals();
-
-// ============================================================
-// STATIC FRONTEND
-// ============================================================
-
-app.use(
-  express.static(__dirname)
-);
+// Serverless functions are not persistent workers. Run this timer only
+// when started as a conventional Node server; Netlify scheduled work should
+// use a Scheduled Function if periodic expiry is required.
+if (require.main === module) {
+  setInterval(expirePendingSignals, LIFECYCLE_INTERVAL_MS);
+  expirePendingSignals();
+}
 
 // ============================================================
 // HEALTH CHECK
@@ -1212,23 +1203,16 @@ app.get('/api/health', (req, res) => {
 });
 
 // ============================================================
-// SERVER
+// LOCAL SERVER + NETLIFY EXPORT
 // ============================================================
 
-const PORT =
-  process.env.PORT || 3000;
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Hardknocks XAUUSD Signal Server running on port ${PORT}`);
+    console.log('Lifecycle engine: PENDING → ACTIVE → WIN/LOSS');
+    console.log('Expired pending setups → INVALIDATED');
+  });
+}
 
-app.listen(PORT, () => {
-
-  console.log(
-    `Hardknocks XAUUSD Signal Server running on port ${PORT}`
-  );
-
-  console.log(
-    'Lifecycle engine: PENDING → ACTIVE → WIN/LOSS'
-  );
-
-  console.log(
-    'Expired pending setups → INVALIDATED'
-  );
-});
+module.exports = app;
