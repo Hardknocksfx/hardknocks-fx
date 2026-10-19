@@ -1,32 +1,45 @@
+require('dotenv').config();
+
+
 const express = require('express');
+const path = require('path');
 const bodyParser = require('body-parser');
 const https = require('https');
 
 const app = express();
+let cache = { data: null, timestamp: 0 };
+const CACHE_TTL = 60000; // 60 seconds
+
+// Serve static files (index.html, api.js) from project root
+app.use(express.static(__dirname));
 
 app.use(bodyParser.json({ limit: '1mb' }));
 
+// ... your existing API routes below ...
+
 // ============================================================
 // CORS
+// Set DASHBOARD_ORIGINS in Render to comma-separated origins, e.g.
+// https://your-site.netlify.app,https://your-custom-domain.com
 // ============================================================
+const cors = require('cors');
 
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header(
-    'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, X-Master-Key'
-  );
-  res.header(
-    'Access-Control-Allow-Methods',
-    'GET, POST, PUT, DELETE, OPTIONS'
-  );
+const allowedOrigins = (process.env.DASHBOARD_ORIGINS || process.env.DASHBOARD_ORIGIN || '')
+  .split(',')
+  .map(origin => origin.trim().replace(/\/$/, ''))
+  .filter(Boolean);
 
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-
-  next();
-});
+app.use(cors({
+  origin(origin, callback) {
+    // Permit non-browser calls (health checks, curl, server-to-server).
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin.replace(/\/$/, ''))) return callback(null, true);
+    return callback(new Error('Origin not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Webhook-Secret', 'X-API-Key'],
+  optionsSuccessStatus: 204
+}));
 
 // ============================================================
 // JSONBIN CONFIGURATION
@@ -36,6 +49,9 @@ app.use((req, res, next) => {
 
 const JSONBIN_BIN_ID = process.env.JSONBIN_BIN_ID;
 const JSONBIN_MASTER_KEY = process.env.JSONBIN_MASTER_KEY;
+const SIGNAL_WEBHOOK_SECRET = process.env.SIGNAL_WEBHOOK_SECRET || '';
+const MARKET_PRICE_API_KEY = process.env.MARKET_PRICE_API_KEY || '';
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
 
 if (!JSONBIN_BIN_ID || !JSONBIN_MASTER_KEY) {
   console.warn(
@@ -47,7 +63,7 @@ if (!JSONBIN_BIN_ID || !JSONBIN_MASTER_KEY) {
 // SIGNAL SETTINGS
 // ============================================================
 
-const MAX_SIGNALS = 25;
+const MAX_SIGNALS = Math.max(25, Number.parseInt(process.env.MAX_SIGNALS || '500', 10) || 500);
 
 // Pending signals expire after 12 hours unless TradingView
 // explicitly invalidates them earlier.
@@ -55,6 +71,38 @@ const DEFAULT_EXPIRY_HOURS = 12;
 
 // How often the server checks for expired pending signals.
 const LIFECYCLE_INTERVAL_MS = 60 * 1000;
+
+// ============================================================
+// OPTIONAL WRITE-ENDPOINT AUTHENTICATION
+// Configure these secrets in Render to enforce authentication.
+// Existing integrations keep working until a secret is configured.
+// ============================================================
+function suppliedSecret(req) {
+  const authorization = String(req.get('authorization') || '');
+  const bearer = authorization.match(/^Bearer\s+(.+)$/i);
+  return req.get('x-webhook-secret') || req.get('x-api-key') ||
+    (bearer ? bearer[1] : '') || (req.body && req.body.secret) || '';
+}
+
+function requireConfiguredSecret(expectedSecret, label) {
+  return (req, res, next) => {
+    if (!expectedSecret) return next();
+    const actual = String(suppliedSecret(req));
+    if (actual.length !== expectedSecret.length ||
+        !require('crypto').timingSafeEqual(Buffer.from(actual), Buffer.from(expectedSecret))) {
+      return res.status(401).json({ success: false, error: `Unauthorized ${label} request.` });
+    }
+    return next();
+  };
+}
+
+const authenticateWebhook = requireConfiguredSecret(SIGNAL_WEBHOOK_SECRET, 'webhook');
+const authenticateMarketPrice = requireConfiguredSecret(MARKET_PRICE_API_KEY, 'market-price');
+const authenticateAdmin = requireConfiguredSecret(ADMIN_API_KEY, 'admin');
+
+if (!SIGNAL_WEBHOOK_SECRET || !MARKET_PRICE_API_KEY || !ADMIN_API_KEY) {
+  console.warn('SECURITY WARNING: one or more write-endpoint secrets are unset. Configure SIGNAL_WEBHOOK_SECRET, MARKET_PRICE_API_KEY, and ADMIN_API_KEY in Render.');
+}
 
 // ============================================================
 // JSONBIN HELPER
@@ -118,6 +166,10 @@ function callJsonBin(method, path, data = null) {
       });
     });
 
+    req.setTimeout(10000, () => {
+      req.destroy(new Error('JSONBin request timed out after 10 seconds.'));
+    });
+
     req.on('error', reject);
 
     if (data) {
@@ -166,105 +218,74 @@ async function saveSignals(signals) {
 }
 
 // ============================================================
-// NORMALIZE STATUS
+// NORMALIZE STATUS AND LEGACY SIGNALS
+// Legacy `open` BUY/SELL LIMIT records without triggered_at are pending,
+// not active. Explicit `active` records remain active.
 // ============================================================
-
-function normalizeStatus(status) {
-
-  if (!status) {
-    return 'pending';
+function normalizeStatus(status, signal = null) {
+  if (!status) return signal ? inferLegacyStatus(signal) : 'pending';
+  const value = String(status).toLowerCase().trim();
+  if (value === 'open' || value === 'live') {
+    if (signal) return inferLegacyStatus({ ...signal, status: value });
+    return 'open';
   }
-
-  const value =
-    String(status).toLowerCase().trim();
-
   const aliases = {
-    open: 'active',
-    live: 'active',
-    active: 'active',
-
-    pending: 'pending',
-    'pending limit': 'pending',
-
-    closed: 'closed',
-
-    win: 'win',
-    winner: 'win',
-    tp: 'win',
-
-    loss: 'loss',
-    loser: 'loss',
-    sl: 'loss',
-
-    invalidated: 'invalidated',
-    invalid: 'invalidated',
-    expired: 'invalidated'
+    active: 'active', pending: 'pending', 'pending limit': 'pending',
+    closed: 'closed', win: 'win', winner: 'win', tp: 'win', take_profit: 'win',
+    loss: 'loss', loser: 'loss', sl: 'loss', stop_loss: 'loss',
+    invalidated: 'invalidated', invalid: 'invalidated', expired: 'invalidated',
+    cancelled: 'invalidated', canceled: 'invalidated'
   };
-
   return aliases[value] || value;
+}
+
+function inferLegacyStatus(signal) {
+  const raw = String(signal?.status || '').toLowerCase().trim();
+  if (['win','winner','tp','take_profit'].includes(raw)) return 'win';
+  if (['loss','loser','sl','stop_loss'].includes(raw)) return 'loss';
+  if (['invalidated','invalid','expired','cancelled','canceled'].includes(raw)) return 'invalidated';
+  if (raw === 'pending' || raw === 'pending limit') return 'pending';
+  if (raw === 'active') return 'active';
+  const side = String(signal?.side || '').toUpperCase();
+  const orderType = String(signal?.orderType || '').toUpperCase();
+  if ((orderType === 'LIMIT' || side.includes('LIMIT')) && !signal?.triggered_at) return 'pending';
+  if (raw === 'open' || raw === 'live') return 'active';
+  return raw || 'pending';
 }
 
 // ============================================================
 // DETERMINE ORDER TYPE / DIRECTION
 // ============================================================
-
 function parseSignalSide(side) {
-
-  const value =
-    String(side || 'BUY')
-      .toUpperCase()
-      .trim();
-
-  const isBuy =
-    value.includes('BUY');
-
-  const isSell =
-    value.includes('SELL');
-
-  const isLimit =
-    value.includes('LIMIT');
-
-  return {
-    direction: isSell ? 'SELL' : 'BUY',
-    orderType: isLimit ? 'LIMIT' : 'MARKET'
-  };
+  const value = String(side || 'BUY').toUpperCase().trim();
+  const direction = value.includes('SELL') ? 'SELL' : 'BUY';
+  const orderType = value.includes('LIMIT') ? 'LIMIT' : (value.includes('STOP') ? 'STOP' : 'MARKET');
+  return { direction, orderType };
 }
 
 // ============================================================
 // DETERMINE INITIAL STATUS
 // ============================================================
-
 function determineInitialStatus(newSignal) {
-
-  const parsed =
-    parseSignalSide(newSignal.side);
-
-  // Explicit status from TradingView gets priority.
-  if (newSignal.status) {
-
-    const supplied =
-      normalizeStatus(newSignal.status);
-
-    if (
-      supplied === 'win' ||
-      supplied === 'loss' ||
-      supplied === 'invalidated'
-    ) {
-      return supplied;
-    }
-
-    if (supplied === 'active') {
-      return 'active';
-    }
-  }
-
-  // Limit orders begin as PENDING.
-  if (parsed.orderType === 'LIMIT') {
-    return 'pending';
-  }
-
-  // Market orders are immediately ACTIVE.
+  const parsed = parseSignalSide(newSignal.side);
+  const supplied = newSignal.status ? normalizeStatus(newSignal.status) : '';
+  if (['win', 'loss', 'invalidated'].includes(supplied)) return supplied;
+  if (supplied === 'active' && parsed.orderType === 'MARKET') return 'active';
+  // Limit/stop entries are not active until the market triggers them.
+  if (parsed.orderType === 'LIMIT' || parsed.orderType === 'STOP') return 'pending';
   return 'active';
+}
+
+function calculateRiskReward(direction, entry, sl, tp) {
+  const risk = direction === 'BUY' ? entry - sl : sl - entry;
+  const reward = direction === 'BUY' ? tp - entry : entry - tp;
+  if (!(risk > 0) || !(reward > 0)) return null;
+  return Number((reward / risk).toFixed(2));
+}
+
+function validateTradeGeometry(direction, entry, sl, tp) {
+  if (![entry, sl, tp].every(Number.isFinite) || entry <= 0 || sl <= 0 || tp <= 0) return false;
+  return direction === 'BUY' ? (sl < entry && entry < tp) : (tp < entry && entry < sl);
 }
 
 // ============================================================
@@ -283,7 +304,7 @@ function validateXAUUSD(symbol) {
 // CREATE SIGNAL
 // ============================================================
 
-app.post('/api/webhook/signal', async (req, res) => {
+app.post('/api/webhook/signal', authenticateWebhook, async (req, res) => {
 
   try {
 
@@ -348,6 +369,15 @@ app.post('/api/webhook/signal', async (req, res) => {
       });
     }
 
+    if (!validateTradeGeometry(parsedSide.direction, entry, sl, tp)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid ${parsedSide.direction} price geometry. BUY requires SL < entry < TP; SELL requires TP < entry < SL.`
+      });
+    }
+
+    const calculatedRR = calculateRiskReward(parsedSide.direction, entry, sl, tp);
+
     // --------------------------------------------------------
     // INITIAL STATUS
     // --------------------------------------------------------
@@ -359,17 +389,11 @@ app.post('/api/webhook/signal', async (req, res) => {
     // EXPIRY
     // --------------------------------------------------------
 
-    const expiryHours =
-      Number(
-        newSignal.expiry_hours ||
-        DEFAULT_EXPIRY_HOURS
-      );
-
-    const expiresAt =
-      new Date(
-        Date.now() +
-        expiryHours * 60 * 60 * 1000
-      ).toISOString();
+    const requestedExpiry = Number(newSignal.expiry_hours ?? DEFAULT_EXPIRY_HOURS);
+    const expiryHours = Number.isFinite(requestedExpiry)
+      ? Math.min(168, Math.max(0.25, requestedExpiry))
+      : DEFAULT_EXPIRY_HOURS;
+    const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString();
 
     // --------------------------------------------------------
     // CREATE SIGNAL OBJECT
@@ -401,11 +425,9 @@ app.post('/api/webhook/signal', async (req, res) => {
 
       tp,
 
-      rr:
-        Number(newSignal.rr || 2.5),
+      rr: calculatedRR,
 
-      score:
-        Number(newSignal.score || 5),
+      score: Math.min(5, Math.max(0, Number.isFinite(Number(newSignal.score)) ? Number(newSignal.score) : 0)),
 
       htf_aligned:
         newSignal.htf_aligned !== false,
@@ -474,14 +496,14 @@ app.post('/api/webhook/signal', async (req, res) => {
       signals.some(signal => {
 
         const status =
-          normalizeStatus(signal.status);
+          normalizeStatus(signal.status, signal);
 
         return (
           (
             status === 'pending' ||
             status === 'active'
           ) &&
-          signal.direction ===
+          String(signal.direction || parseSignalSide(signal.side).direction).toUpperCase() ===
             parsedSide.direction &&
           Math.abs(
             Number(signal.entry) - entry
@@ -570,14 +592,15 @@ app.post('/api/webhook/signal', async (req, res) => {
 // ACTIVE  -> LOSS
 // ============================================================
 
-app.post('/api/market-price', async (req, res) => {
+app.post('/api/market-price', authenticateMarketPrice, async (req, res) => {
 
   try {
 
+    const body = req.body || {};
     const symbol =
       String(
-        req.body.symbol ||
-        req.body.sym ||
+        body.symbol ||
+        body.sym ||
         'XAUUSD'
       )
       .toUpperCase()
@@ -594,12 +617,12 @@ app.post('/api/market-price', async (req, res) => {
 
     const price =
       Number(
-        req.body.price ||
-        req.body.last ||
-        req.body.close
+        body.price ??
+        body.last ??
+        body.close
       );
 
-    if (!Number.isFinite(price)) {
+    if (!Number.isFinite(price) || price <= 0) {
 
       return res.status(400).json({
         error:
@@ -615,7 +638,7 @@ app.post('/api/market-price', async (req, res) => {
     for (const signal of signals) {
 
       const status =
-        normalizeStatus(signal.status);
+        normalizeStatus(signal.status, signal);
 
       const direction =
         String(
@@ -640,18 +663,13 @@ app.post('/api/market-price', async (req, res) => {
 
         let triggered = false;
 
-        if (
-          direction === 'BUY' &&
-          price <= entry
-        ) {
-          triggered = true;
-        }
-
-        if (
-          direction === 'SELL' &&
-          price >= entry
-        ) {
-          triggered = true;
+        const orderType = String(signal.orderType || parseSignalSide(signal.side).orderType).toUpperCase();
+        if (orderType === 'LIMIT') {
+          if (direction === 'BUY' && price <= entry) triggered = true;
+          if (direction === 'SELL' && price >= entry) triggered = true;
+        } else if (orderType === 'STOP') {
+          if (direction === 'BUY' && price >= entry) triggered = true;
+          if (direction === 'SELL' && price <= entry) triggered = true;
         }
 
         if (triggered) {
@@ -682,7 +700,7 @@ app.post('/api/market-price', async (req, res) => {
       // ======================================================
 
       if (
-        normalizeStatus(signal.status) ===
+        normalizeStatus(signal.status, signal) ===
         'active'
       ) {
 
@@ -788,12 +806,10 @@ app.post('/api/market-price', async (req, res) => {
     // SAVE ONLY IF SOMETHING CHANGED
     // --------------------------------------------------------
 
-    if (changed) {
-
-      await saveSignals(
-        signals.slice(0, MAX_SIGNALS)
-      );
-    }
+   if (changed) {
+  await saveSignals(signals.slice(0, MAX_SIGNALS));
+  cache = { data: null, timestamp: 0 };
+}
 
     return res.json({
 
@@ -809,7 +825,7 @@ app.post('/api/market-price', async (req, res) => {
         signals.filter(signal => {
 
           const status =
-            normalizeStatus(signal.status);
+            normalizeStatus(signal.status, signal);
 
           return (
             status === 'pending' ||
@@ -821,7 +837,7 @@ app.post('/api/market-price', async (req, res) => {
         signals.filter(signal => {
 
           const status =
-            normalizeStatus(signal.status);
+            normalizeStatus(signal.status, signal);
 
           return (
             status === 'win' ||
@@ -858,7 +874,7 @@ app.post('/api/market-price', async (req, res) => {
 // }
 // ============================================================
 
-app.post('/api/signals/:id/invalidate', async (req, res) => {
+app.post('/api/signals/:id/invalidate', authenticateAdmin, async (req, res) => {
 
   try {
 
@@ -882,7 +898,7 @@ app.post('/api/signals/:id/invalidate', async (req, res) => {
     }
 
     const status =
-      normalizeStatus(signal.status);
+      normalizeStatus(signal.status, signal);
 
     // Never invalidate a completed trade.
     if (
@@ -936,32 +952,36 @@ app.post('/api/signals/:id/invalidate', async (req, res) => {
 // GET ALL SIGNALS
 // ============================================================
 
+
 app.get('/api/signals', async (req, res) => {
+  const now = Date.now();
+
+  if (cache.data && now - cache.timestamp < CACHE_TTL) {
+    return res.json(cache.data);
+  }
 
   try {
+    const allSignals = await getSignals();
 
-    const signals =
-      await getSignals();
-
-    return res.json({
+    const data = {
       success: true,
       symbol: 'XAUUSD',
-      signals
-    });
+      signals: allSignals
+    };
 
+    cache = { data, timestamp: now };
+    return res.json(data);
   } catch (err) {
-
-    console.error(
-      'Signal retrieval error:',
-      err
-    );
+    console.error('Signals retrieval error:', err.message);
 
     return res.status(500).json({
-      error:
-        'Unable to retrieve XAUUSD signals.'
+      success: false,
+      symbol: 'XAUUSD',
+      error: 'Unable to retrieve signals from storage.'
     });
   }
 });
+
 
 // ============================================================
 // LIVE SIGNAL FEED
@@ -979,7 +999,7 @@ app.get('/api/signals/live', async (req, res) => {
       signals.filter(signal => {
 
         const status =
-          normalizeStatus(signal.status);
+          normalizeStatus(signal.status, signal);
 
         return (
           status === 'pending' ||
@@ -1012,57 +1032,37 @@ app.get('/api/signals/live', async (req, res) => {
 // WIN + LOSS + INVALIDATED
 // ============================================================
 
+
 app.get('/api/track-record', async (req, res) => {
-
   try {
+    const allSignals = await getSignals();
 
-    const signals =
-      await getSignals();
+    const wins = allSignals.filter(s =>
+      ['WIN', 'WINNER', 'TP', 'TAKE_PROFIT'].includes(
+        String(s.status || '').toUpperCase()
+      ) ||
+      ['WIN'].includes(String(s.result || '').toUpperCase())
+    ).length;
 
-    const trackRecord =
-      signals.filter(signal => {
+    const losses = allSignals.filter(s =>
+      ['LOSS', 'LOSER', 'SL', 'STOP_LOSS'].includes(
+        String(s.status || '').toUpperCase()
+      ) ||
+      ['LOSS'].includes(String(s.result || '').toUpperCase())
+    ).length;
 
-        const status =
-          normalizeStatus(signal.status);
+    const invalidated = allSignals.filter(s =>
+      String(s.status || '').toUpperCase() === 'INVALIDATED'
+    ).length;
 
-        return (
-          status === 'win' ||
-          status === 'loss' ||
-          status === 'invalidated'
-        );
-      });
-
-    const wins =
-      trackRecord.filter(
-        s => normalizeStatus(s.status) === 'win'
-      ).length;
-
-    const losses =
-      trackRecord.filter(
-        s => normalizeStatus(s.status) === 'loss'
-      ).length;
-
-    const invalidated =
-      trackRecord.filter(
-        s => normalizeStatus(s.status) === 'invalidated'
-      ).length;
-
-    const completed =
-      wins + losses;
-
-    const winRate =
-      completed > 0
-        ? Number(
-            ((wins / completed) * 100).toFixed(2)
-          )
-        : 0;
+    const completed = wins + losses;
+    const winRate = completed > 0
+      ? Math.round((wins / completed) * 100)
+      : 0;
 
     return res.json({
-
       success: true,
-
       symbol: 'XAUUSD',
-
       summary: {
         wins,
         losses,
@@ -1070,21 +1070,15 @@ app.get('/api/track-record', async (req, res) => {
         completed,
         winRate
       },
-
-      signals:
-        trackRecord
+      signals: allSignals
     });
-
   } catch (err) {
-
-    console.error(
-      'Track record error:',
-      err
-    );
+    console.error('Track record retrieval error:', err.message);
 
     return res.status(500).json({
-      error:
-        'Unable to retrieve XAUUSD track record.'
+      success: false,
+      symbol: 'XAUUSD',
+      error: 'Unable to retrieve track record from storage.'
     });
   }
 });
@@ -1099,23 +1093,17 @@ app.get('/api/track-record', async (req, res) => {
 // They are NOT counted as losses.
 // ============================================================
 
+
 async function expirePendingSignals() {
-
   try {
-
-    const signals =
-      await getSignals();
-
-    const now =
-      Date.now();
-
+    const signals = await getSignals();
+    const now = Date.now();
     let changed = false;
 
     for (const signal of signals) {
+      const status = normalizeStatus(signal.status, signal);
 
-      const status =
-        normalizeStatus(signal.status);
-
+      // Only expire untriggered pending limit/stop orders.
       if (status !== 'pending') {
         continue;
       }
@@ -1124,44 +1112,28 @@ async function expirePendingSignals() {
         continue;
       }
 
-      const expiry =
-        new Date(signal.expires_at).getTime();
+      const expiry = new Date(signal.expires_at).getTime();
 
-      if (
-        Number.isFinite(expiry) &&
-        now >= expiry
-      ) {
-
-        signal.status =
-          'invalidated';
-
-        signal.result =
-          'INVALIDATED';
-
-        signal.invalidated_at =
-          new Date().toISOString();
-
-        console.log(
-          `XAUUSD pending signal expired: ${signal.id}`
-        );
-
-        changed = true;
+      if (!Number.isFinite(expiry) || now < expiry) {
+        continue;
       }
+
+      signal.status = 'invalidated';
+      signal.result = 'INVALIDATED';
+      signal.invalidated_at =
+        signal.invalidated_at || new Date().toISOString();
+
+      console.log(`XAUUSD pending signal expired: ${signal.id}`);
+      changed = true;
     }
 
     if (changed) {
-
-      await saveSignals(
-        signals.slice(0, MAX_SIGNALS)
-      );
+      await saveSignals(signals.slice(0, MAX_SIGNALS));
+      cache = { data: null, timestamp: 0 };
+      console.log('Expired signals saved to JSONBin.');
     }
-
   } catch (err) {
-
-    console.error(
-      'Pending expiration engine error:',
-      err
-    );
+    console.error('Pending expiration engine error:', err.message);
   }
 }
 
@@ -1188,6 +1160,8 @@ app.get('/api/health', (req, res) => {
 
     symbol:
       'XAUUSD',
+
+    storageConfigured: Boolean(JSONBIN_BIN_ID && JSONBIN_MASTER_KEY),
 
     lifecycle: [
       'PENDING',
