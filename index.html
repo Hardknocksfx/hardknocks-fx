@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>Hardknocks Fx | XAU/USD Signal Engine</title>
+<style>
+.badge { padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+.status-pending     { background: #f59e0b22; color: #f59e0b; }
+.status-active      { background: #3b82f622; color: #3b82f6; }
+.status-win         { background: #10b98122; color: #10b981; }
+.status-loss        { background: #ef444422; color: #ef4444; }
+.status-invalidated { background: #6b7280aa; color: #9ca3af; }
+.status-expired     { background: #6b728022; color: #6b7280; }
+
+:root{--bg:#0b0b0f;--card:#13131a;--border:#22222f;--text:#e1e1e6;--muted:#7d7d92;--gold:#f3ba2f;--green:#0ecb81;--red:#f6465d}*{box-sizing:border-box;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif}body{background:var(--bg);color:var(--text);padding:20px;line-height:1.5}.container{max-width:1000px;margin:auto}header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:30px;border-bottom:1px solid var(--border);padding-bottom:15px}h1{font-size:1.35rem;color:var(--gold)}h2{font-size:1.05rem;text-transform:uppercase;margin-bottom:15px;border-left:3px solid var(--gold);padding-left:10px}.gold-ticker,.stat-card,.sig{background:var(--card);border:1px solid var(--border);border-radius:8px}.gold-ticker{padding:8px 14px;font-weight:600}.header-actions{display:flex;align-items:center;gap:10px}.vip-btn{background:var(--gold);color:#0b0b0f;border:none;padding:8px 14px;border-radius:8px;font-weight:700;font-size:0.85rem;cursor:pointer;transition:opacity 0.2s ease}.vip-btn:hover{opacity:0.9}.stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:35px}.stat-card{text-align:center;padding:18px 10px}.stat-title{font-size:.7rem;text-transform:uppercase;color:var(--muted);letter-spacing:1px}.stat-val{font-size:1.4rem;font-weight:700}.note{font-size:.72rem;color:var(--muted);margin-top:5px}.pos{color:var(--green)}.neg{color:var(--red)}section{margin-bottom:38px}.feed-container{display:flex;flex-direction:column;gap:10px}.sig{padding:15px;display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr 1fr 1fr;align-items:center;gap:10px;font-size:.86rem;overflow-wrap:anywhere}.side{font-weight:700;padding:4px 7px;border-radius:4px;display:inline-block;text-align:center}.tag-long{background:#0ecb8126;color:var(--green)}.tag-short{background:#f6465d26;color:var(--red)}.rr{font-weight:700}.score-badge,.blackout-flag{padding:2px 6px;border-radius:4px;font-size:.68rem;display:inline-block}.score-badge{background:#f3ba2f26;color:var(--gold)}.blackout-flag{background:#f6465d33;color:var(--red)}.status-pending,.status-active{font-size:.74rem;font-weight:700;text-align:center}.status-pending{color:var(--gold)}.status-active,.win{color:var(--green)}.loss{color:var(--red)}.invalidated,.expired,.closed{color:var(--muted)}.lifecycle-label{display:block;font-size:.62rem;color:var(--muted);text-align:center;margin-top:3px}.cell-label{display:none}footer{text-align:center;font-size:.75rem;color:var(--muted);border-top:1px solid var(--border);padding-top:20px;margin-top:40px}.error{color:var(--red)!important}.dimmed{opacity:.7}@media(max-width:760px){body{padding:12px}h1{font-size:1.1rem}.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.stat-card{padding:13px 8px}.sig{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px;font-size:.82rem}.cell-label{display:inline;color:var(--muted);font-size:.72rem}.gold-ticker{font-size:.82rem;padding:6px 9px}}
+</style></head><body><div class="container">
+<header>
+  <h1>Hardknocks Fx · XAU/USD Engine</h1>
+  <div class="header-actions">
+    <div class="gold-ticker" id="goldTicker">Gold: Loading...</div>
+    <button class="vip-btn" onclick="handleVipSubscribe()">Subscribe VIP</button>
+  </div>
+</header>
+<div class="stats-grid"><div class="stat-card"><div class="stat-title">Completed Trades</div><div class="stat-val" id="statTotal">0</div><div class="note" id="expNote">No completed trades logged yet.</div></div><div class="stat-card"><div class="stat-title">Win Rate</div><div class="stat-val" id="statWinRate">—</div><div class="note">Target: &gt; 55%</div></div><div class="stat-card"><div class="stat-title">Avg R-Multiple</div><div class="stat-val" id="statAvgR">—</div><div class="note">Average realized R</div></div><div class="stat-card"><div class="stat-title">Expectancy / Trade</div><div class="stat-val" id="statExp">—</div><div class="note">Average realized R per trade</div></div></div>
+<section><h2>Real-Time XAU/USD Signal Feed</h2><div id="feed" class="feed-container"><p>Connecting to signal engine…</p></div></section><section><h2>XAU/USD Track Record (Wins &amp; Losses)</h2><div id="history-feed" class="feed-container"><p>Loading historical records…</p></div></section><footer><p id="feedStatus">Initializing…</p></footer></div>
+<script>
+'use strict';
+const API='https://hardknocks-fx-test.onrender.com';
+const C={signals:API+'/api/signals',live:API+'/api/signals/live',history:API+'/api/track-record',market:API+'/api/market-price',gold:'https://api.gold-api.com/price/XAU',poll:10000,pricePoll:15000,timeout:10000};const $=id=>document.getElementById(id);let all=[],live=[],historyRows=[],lastGold=null,lastGoldAt=null,busy=false,priceBusy=false;
+function n(v){if(v===null||v===undefined||v==='')return null;let x=Number(v);return Number.isFinite(x)?x:null}function symbol(s){return String(s?.sym??s?.symbol??'').toUpperCase().replace(/[^A-Z0-9]/g,'')}function xau(s){return ['XAUUSD','GOLD','XAUUS'].includes(symbol(s))}function side(s){return String(s?.side??s?.direction??'').toUpperCase().trim()}function limit(s){return /LIMIT|STOP/.test(side(s))}function terminal(v){return ['win','winner','tp','take_profit','loss','loser','sl','stop_loss','closed','invalid','invalidated','expired','cancelled','canceled'].includes(String(v??'').toLowerCase().trim())}
+function expiry(s){let v=s?.expires_at??s?.expiresAt??s?.expiry;if(!v)return null;let t=typeof v==='number'?(v<1e12?v*1000:v):Date.parse(v);return Number.isFinite(t)?t:null}
+function status(s){let v=String(s?.status??'').toLowerCase().trim(),r=String(s?.result??'').toLowerCase().trim();if(['win','winner','tp','take_profit'].includes(v)||v==='closed'&&['win','winner','tp','take_profit'].includes(r))return'win';if(['loss','loser','sl','stop_loss'].includes(v)||v==='closed'&&['loss','loser','sl','stop_loss'].includes(r))return'loss';if(['invalid','invalidated','cancelled','canceled'].includes(v))return'invalidated';if(v==='expired'||expiry(s)!==null&&expiry(s)<=Date.now()&&!terminal(v))return'expired';if(v==='closed')return'closed';if(['pending','pending limit','queued'].includes(v))return'pending';if(['active','filled','triggered','in_trade','in-trade'].includes(v))return'active';if(v==='open')return limit(s)?'pending':'active';return v||'unknown'}
+function fmt(v){let x=n(v);return x===null?'—':x.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:3})}function rr(s){let e=n(s.entry),sl=n(s.sl??s.stop_loss),tp=n(s.tp??s.take_profit);if(e===null||sl===null||tp===null)return null;let buy=/BUY|LONG/.test(side(s)),risk=buy?e-sl:sl-e,reward=buy?tp-e:e-tp;return risk>0&&reward>0?reward/risk:null}
+async function json(url,opts={}){let c=new AbortController(),t=setTimeout(()=>c.abort(),C.timeout);try{let r=await fetch(url,{cache:'no-store',...opts,signal:c.signal});if(!r.ok)throw Error('HTTP '+r.status+' '+url);return await r.json()}finally{clearTimeout(t)}}function records(p){return Array.isArray(p)?p:Array.isArray(p?.signals)?p.signals:Array.isArray(p?.data)?p.data:[]}function setStatus(t,e=false){$('feedStatus').textContent=t;$('feedStatus').classList.toggle('error',e)}function cell(label,value,cls=''){let d=document.createElement('div');if(cls)d.className=cls;let l=document.createElement('span');l.className='cell-label';l.textContent=label+': ';let v=document.createElement('span');v.textContent=value;d.append(l,v);return d}function badge(t,c){let e=document.createElement('span');e.className=c;e.textContent=t;return e}
+function card(s,hist=false){let st=status(s),sd=side(s)||'—',buy=/BUY|LONG/.test(sd),d=document.createElement('div');d.className='sig'+(['expired','invalidated'].includes(st)||s.blackout?' dimmed':'');let dir=document.createElement('div');dir.append(badge(sd,'side '+(buy?'tag-long':'tag-short')));let sy=document.createElement('span');sy.textContent=' '+(xau(s)?'XAU/USD':s.sym??s.symbol??'—');dir.append(sy);d.append(dir,cell('Entry',fmt(s.entry)),cell('SL',fmt(s.sl??s.stop_loss)),cell('TP',fmt(s.tp??s.take_profit)));let r=n(s.r_multiple??s.rMultiple),ratio=rr(s);d.append(cell(hist?'Result':'R:R',hist&&r!==null?`${r>=0?'+':''}${r.toFixed(2)}R`:ratio===null?'—':ratio.toFixed(2)+':1','rr'));let w=document.createElement('div');if(!hist&&['pending','active'].includes(st)){w.append(badge(st==='pending'?'PENDING':'ACTIVE',st==='pending'?'status-pending':'status-active'));let l=document.createElement('span');l.className='lifecycle-label';l.textContent=st==='pending'?'Limit order awaiting fill confirmation':'Server reports entry filled';w.append(l)}else{let label=st==='win'?'WIN':st==='loss'?'LOSS':st==='expired'?'EXPIRED':st==='invalidated'?'INVALIDATED':st==='closed'?String(s.result??'CLOSED').toUpperCase():st.toUpperCase();w.append(badge(label,st))}d.append(w);if(!hist){let score=n(s.score);if(score!==null)d.append(badge(score+'/5 Conf','score-badge'));if(s.blackout)d.append(badge('NEWS BLOCK','blackout-flag'))}d.title=Array.isArray(s.confluence)?s.confluence.join(' • '):'';return d}
+function msg(root,t){let p=document.createElement('p');p.style.cssText='text-align:center;color:#7d7d92;padding:15px';p.textContent=t;root.append(p)}function key(s){return String(s.id??[s.sym??s.symbol,s.published_at,s.entry].join('-'))}
+function updateStats(){let done=historyRows.filter(s=>xau(s)&&['win','loss'].includes(status(s))&&n(s.r_multiple??s.rMultiple)!==null);$('statTotal').textContent=done.length;if(!done.length){['statWinRate','statAvgR','statExp'].forEach(id=>{$(id).textContent='—';$(id).className='stat-val'});$('expNote').textContent='No completed XAU/USD trades with verified R results yet.';return}let rs=done.map(s=>n(s.r_multiple??s.rMultiple)),wins=done.filter(s=>status(s)==='win').length,avg=rs.reduce((a,b)=>a+b,0)/rs.length,rate=wins/done.length;function put(id,v,pos){$(id).textContent=v;$(id).className='stat-val '+(pos?'pos':'neg')}put('statWinRate',(rate*100).toFixed(1)+'\%',rate>=.5);put('statAvgR',(avg>=0?'+':'')+avg.toFixed(2)+'R',avg>=0);put('statExp',(avg>=0?'+':'')+avg.toFixed(2)+'R',avg>=0);$('expNote').textContent=done.length<30?'Small sample ('+done.length+' completed trades).':'Based on '+done.length+' completed trades; past results do not guarantee future performance.'}
+function render(){let f=$('feed'),h=$('history-feed');f.replaceChildren();h.replaceChildren();let curr=[...new Map(live.filter(xau).map(s=>[key(s),s])).values()].filter(s=>['pending','active'].includes(status(s)));if(!curr.length)msg(f,'No pending or confirmed active XAU/USD signals are available.');else curr.forEach(s=>f.append(card(s)));let hist=[...new Map(historyRows.filter(xau).map(s=>[key(s),s])).values()].filter(s=>['win','loss','closed','expired','invalidated'].includes(status(s)));if(!hist.length)msg(h,'No closed, expired, or invalidated XAU/USD signals recorded yet.');else hist.reverse().forEach(s=>h.append(card(s,true)))}
+async function load(){if(busy)return;busy=true;try{let r=await Promise.allSettled([json(C.signals),json(C.live),json(C.history)]),errors=0;if(r[0].status==='fulfilled')all=records(r[0].value);else{errors++;console.warn('Signals endpoint failed',r[0].reason)}if(r[1].status==='fulfilled')live=records(r[1].value);else{errors++;console.warn('Live endpoint failed',r[1].reason)}if(r[2].status==='fulfilled')historyRows=records(r[2].value);else{errors++;historyRows=all;console.warn('History endpoint failed; using all-signals fallback',r[2].reason)}historyRows=[...new Map([...all,...historyRows].map(s=>[key(s),s])).values()];updateStats();render();setStatus((errors?'Partial data · '+errors+' endpoint(s) failed · ':'Updated ')+new Date().toLocaleTimeString()+' · '+live.length+' live records · '+historyRows.length+' history records',errors>0)}catch(e){console.error(e);setStatus('Dashboard update failed. Check browser console and Render API.',true)}finally{busy=false}}
+async function updatePrice(){if(priceBusy)return;priceBusy=true;try{let d=await json(C.gold),p=n(d?.price);if(p===null||p<=0)throw Error('Invalid gold price');lastGold=p;lastGoldAt=new Date();$('goldTicker').textContent='Gold:$'+p.toFixed(2);$('goldTicker').title='Last updated '+lastGoldAt.toLocaleTimeString();try{await json(C.market,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({symbol:'XAUUSD',price:p,source:'gold-api'})})}catch(e){console.warn('Optional market-price POST failed',e)}}catch(e){console.warn('Gold price feed unavailable',e);$('goldTicker').textContent=lastGold===null?'Gold: Price unavailable':'Gold: $'+lastGold.toFixed(2)+' · STALE';$('goldTicker').title=lastGoldAt?'Last successful update '+lastGoldAt.toLocaleTimeString():'No successful price update yet'}finally{priceBusy=false}}
+
+// Handler for the VIP Subscribe button
+async function handleVipSubscribe() {
+  try {
+    const btn = event.target;
+    btn.textContent = 'Redirecting...';
+    btn.disabled = true;
+    
+    // Calls your backend checkout endpoint (or redirects directly to your payment URL)
+    const res = await fetch('https://hardknocks-fx-test.onrender.com/api/create-checkout-session', { method: 'POST' });
+    const data = await res.json();
+    
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      throw new Error('Checkout session creation failed');
+    }
+  } catch (err) {
+    console.warn('VIP payment redirect fallback:', err);
+    // Fallback: direct user to your payment link or modal if endpoint isn't set up yet
+    alert('VIP Checkout is initializing. Please connect your payment gateway endpoint on your server.');
+    event.target.textContent = 'Subscribe VIP';
+    event.target.disabled = false;
+  }
+}
+
+// ─── Start the dashboard ───────────────────────────
+async function init(){
+  setStatus('Connecting to signal API…');
+  await Promise.allSettled([load(), updatePrice()]);
+  setInterval(load, C.poll);
+  setInterval(updatePrice, C.pricePoll);
+}
+init();
+</script>
+</body></html>
