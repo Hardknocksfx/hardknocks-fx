@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+check.txt
+full.txt
+*.log
+jsonbin-backup.json
+server-jsonbin-backup.js
+index.backup.html
+public/index.backup.html
